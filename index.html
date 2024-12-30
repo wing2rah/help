@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition Assistant</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .mic-button {
+            background: white;
+            border: none;
+            padding: 1.5rem;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+        }
+
+        .mic-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .mic-button.listening {
+            animation: pulse 1.5s infinite;
+            background: #ff4b4b;
+        }
+
+        .mic-button i {
+            font-size: 2rem;
+            color: #764ba2;
+        }
+
+        .mic-button.listening i {
+            color: white;
+        }
+
+        .status {
+            color: white;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .result-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin-top: 2rem;
+            width: 100%;
+            max-height: 400px;
+            overflow-y: auto;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+        }
+
+        .result-container.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .result-container h2 {
+            color: #764ba2;
+            margin-bottom: 1rem;
+        }
+
+        .result-content {
+            text-align: left;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .instructions {
+            color: white;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice Assistant</h1>
+        <button class="mic-button">
+            <i class="fas fa-microphone"></i>
+        </button>
+        <div class="status">Click the microphone to start speaking</div>
+        <div class="instructions">
+            Try saying:<br>
+            "Hello" or "Information about [any topic]"
+        </div>
+        <div class="result-container">
+            <h2>Results</h2>
+            <div class="result-content"></div>
+        </div>
+    </div>
+
+    <script>
+        const button = document.querySelector('.mic-button');
+        const status = document.querySelector('.status');
+        const resultContainer = document.querySelector('.result-container');
+        const resultContent = document.querySelector('.result-content');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert("Speech Recognition is not supported in this browser.");
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = "en-US";
+
+            button.onclick = () => {
+                recognition.start();
+                button.classList.add('listening');
+                status.textContent = "Listening...";
+                resultContainer.classList.remove('show');
+            };
+
+            recognition.onstart = function() {
+                console.log("Recognition started...");
+            };
+
+            recognition.onresult = function(event) {
+                const current = event.resultIndex;
+                const transcript = event.results[current][0].transcript.toLowerCase();
+                console.log("Transcript:", transcript);
+                
+                resultContainer.classList.add('show');
+                
+                if (transcript.includes("hello")) {
+                    resultContent.textContent = "Hello! How can I help you today?";
+                    readOut("Hello! How can I help you today?");
+                } else if (transcript.includes("information") && transcript.includes("about")) {
+                    const apiBase = "https://en.wikipedia.org/w/api.php?format=json&action=query&origin=*&prop=extracts&exintro&explaintext&redirects=1&titles=";
+                    const subject = transcript.replace("information about", "").trim();
+                    const apiURL = apiBase + encodeURIComponent(subject);
+
+                    resultContent.textContent = "Searching for information about " + subject + "...";
+                    
+                    fetch(apiURL)
+                        .then(response => response.json())
+                        .then(data => {
+                            const pages = data.query.pages;
+                            const pageId = Object.keys(pages)[0];
+                            const extract = pages[pageId].extract || "Sorry, I couldn't find information on that.";
+                            
+                            resultContent.textContent = extract;
+                            readOut(extract);
+                        })
+                        .catch(error => {
+                            console.error("Error fetching data:", error);
+                            resultContent.textContent = "Sorry, there was an error fetching the information.";
+                            readOut("Sorry, there was an error fetching the information.");
+                        });
+                } else {
+                    resultContent.textContent = "Sorry, I didn't understand that. Try saying 'hello' or 'information about [topic]'";
+                    readOut("Sorry, I didn't understand that.");
+                }
+            };
+
+            recognition.onerror = function(event) {
+                console.error("Recognition error:", event.error);
+                status.textContent = "Error occurred. Please try again.";
+                button.classList.remove('listening');
+            };
+
+            recognition.onend = function() {
+                console.log("Recognition ended.");
+                status.textContent = "Click the microphone to start speaking";
+                button.classList.remove('listening');
+            };
+
+            function readOut(message) {
+                const speech = new SpeechSynthesisUtterance();
+                speech.text = message;
+                window.speechSynthesis.speak(speech);
+                console.log("Speaking:", message);
+            }
+        }
+    </script>
+</body>
+</html>
